@@ -14,7 +14,7 @@
 NETID=$(whoami)
 SCRATCH=/scratch/${NETID}
 OVERLAY=${SCRATCH}/overlay-15GB-500K.ext3
-SIF=/share/apps/images/cuda12.3.2-cudnn9.0.0-ubuntu-22.04.sif
+SIF=${SCRATCH}/cuda13.0.1-cudnn9.13.0-ubuntu-24.04.3.sif
 
 mkdir -p ${SCRATCH}/logs
 
@@ -25,7 +25,6 @@ singularity exec \
     ${SIF} \
     /bin/bash -c "
         source /ext3/env.sh
-        conda activate dl_env
 
         export NETID=${NETID}
         export WANDB_API_KEY=\$(cat ~/.wandb_key 2>/dev/null || echo '')
