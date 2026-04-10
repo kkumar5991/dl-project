@@ -29,17 +29,9 @@ singularity exec \
         export WANDB_API_KEY=\$(cat ~/.wandb_key 2>/dev/null || echo '')
         export THE_WELL_DATA_DIR=/scratch/${NETID}/data
 
-        # Use or create a venv in /scratch (writable)
-        VENV=/scratch/${NETID}/dl_venv
-        cd /scratch/${NETID}/dl-project
-        if [ ! -f \${VENV}/bin/activate ]; then
-            echo 'Creating virtual environment...'
-            python3 -m venv \${VENV}
-            source \${VENV}/bin/activate
-            pip install -r requirements.txt
-        else
-            source \${VENV}/bin/activate
-        fi
+        cd /scratch/${NETID}/dl-project/dl-project
+        pip install --user --break-system-packages -r requirements.txt
+        export PATH=\$HOME/.local/bin:\$PATH
 
         bash scripts/active_matter/run_train_jepa.sh
     "
