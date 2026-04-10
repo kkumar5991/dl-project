@@ -32,8 +32,8 @@ singularity exec \
         # Use or create a venv in /scratch (writable)
         VENV=/scratch/${NETID}/dl_venv
         cd /scratch/${NETID}/dl-project
-        if [ ! -f "\${VENV}/bin/activate" ]; then
-            echo "Creating virtual environment at \${VENV}..."
+        if [ ! -f \${VENV}/bin/activate ]; then
+            echo 'Creating virtual environment...'
             python3 -m venv \${VENV}
             source \${VENV}/bin/activate
             pip install -r requirements.txt
