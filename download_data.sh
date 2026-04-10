@@ -3,16 +3,15 @@
 # Run this from a data transfer node: ssh $NETID@dtn.torch.hpc.nyu.edu
 
 NETID=$(whoami)
-DATA_DIR=/scratch/${NETID}/data
+DATA_DIR=/scratch/${NETID}/dl-proj/data
 
 mkdir -p ${DATA_DIR}
 
 echo "Downloading polymathic-ai/active_matter (~52 GB) to ${DATA_DIR} ..."
 
-huggingface-cli download \
+hf download \
     polymathic-ai/active_matter \
     --repo-type dataset \
     --local-dir ${DATA_DIR}/active_matter \
-    --local-dir-use-symlinks False
 
 echo "Done. Dataset at: ${DATA_DIR}/active_matter"
