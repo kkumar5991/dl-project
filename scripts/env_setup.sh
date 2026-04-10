@@ -6,10 +6,10 @@
 # module load python/3.11.7
 
 # Activate your virtual environment:
-source /path/to/your/venv/bin/activate
+# (conda env is activated by the SLURM script before this is sourced)
 
 # Navigate to the project root:
-cd /path/to/physics_jepa_public
+# (cd is handled by the SLURM script)
 
 # Set the path to The Well datasets:
-export THE_WELL_DATA_DIR=/path/to/the_well/datasets
+# (THE_WELL_DATA_DIR is exported by the SLURM script)

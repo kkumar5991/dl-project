@@ -29,10 +29,9 @@ singularity exec \
 
         export NETID=${NETID}
         export WANDB_API_KEY=\$(cat ~/.wandb_key 2>/dev/null || echo '')
+        export THE_WELL_DATA_DIR=/scratch/${NETID}/data
 
         cd /scratch/${NETID}/dl-project
         pip install -r requirements.txt
-        torchrun --nproc_per_node=1 --standalone \
-            -m physics_jepa.train_jepa \
-            configs/train_activematter_small.yaml
+        bash scripts/active_matter/run_train_jepa.sh
     "
