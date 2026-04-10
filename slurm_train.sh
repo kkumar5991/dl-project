@@ -24,13 +24,22 @@ singularity exec \
     --overlay ${OVERLAY}:ro \
     ${SIF} \
     /bin/bash -c "
-        source /ext3/env.sh
 
         export NETID=${NETID}
         export WANDB_API_KEY=\$(cat ~/.wandb_key 2>/dev/null || echo '')
         export THE_WELL_DATA_DIR=/scratch/${NETID}/data
 
+        # Use or create a venv in /scratch (writable)
+        VENV=/scratch/${NETID}/dl_venv
         cd /scratch/${NETID}/dl-project
-        pip install -r requirements.txt
+        if [ ! -f "\${VENV}/bin/activate" ]; then
+            echo "Creating virtual environment at \${VENV}..."
+            python3 -m venv \${VENV}
+            source \${VENV}/bin/activate
+            pip install -r requirements.txt
+        else
+            source \${VENV}/bin/activate
+        fi
+
         bash scripts/active_matter/run_train_jepa.sh
     "
