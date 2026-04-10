@@ -31,5 +31,8 @@ singularity exec \
         export WANDB_API_KEY=\$(cat ~/.wandb_key 2>/dev/null || echo '')
 
         cd /scratch/${NETID}/dl-project
-        jupyter nbconvert --to script vjepa2_active_matter.ipynb --stdout | python
+        pip install -r requirements.txt
+        torchrun --nproc_per_node=1 --standalone \
+            -m physics_jepa.train_jepa \
+            configs/train_activematter_small.yaml
     "
