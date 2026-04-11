@@ -32,7 +32,7 @@ singularity exec \
         cd /scratch/${NETID}/dl-project/dl-project
         pip install --user --break-system-packages -r requirements.txt
         export PATH=\$HOME/.local/bin:\$PATH
-        python generate_subset_config.py \
+        python3 generate_subset_config.py \
             --dataset active_matter \
             --num_frames 16 \
             --split train \
