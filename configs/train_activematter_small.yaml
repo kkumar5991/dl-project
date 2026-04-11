@@ -42,5 +42,6 @@ ft:
   run_name: "activematter-jepa-FT-noise-std-1.0"
   distributed: false
 
+wandb_project: "physics-jepa"
 out_path: "./checkpoints"
 cache_path: "./dataset_cache"

@@ -19,5 +19,6 @@ ft:
   weight_decay: 0.01
   distributed: false
 
+wandb_project: "physics-jepa"
 out_path: "./checkpoints"
 cache_path: "./dataset_cache"

@@ -46,5 +46,6 @@ ft:
   run_name: "activematter-channel-jepa-FT-subset"
   distributed: false
 
+wandb_project: "physics-jepa"
 out_path: "./checkpoints"
 cache_path: "./dataset_cache"

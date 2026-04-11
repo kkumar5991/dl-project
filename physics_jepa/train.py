@@ -6,6 +6,7 @@ from torch.utils.data import IterableDataset
 from torch.nn import MSELoss
 
 import os
+import signal
 from pathlib import Path
 from tqdm import tqdm
 from einops import rearrange
@@ -50,6 +51,57 @@ class Trainer:
         self.val_loader = get_val_dataloader_from_cfg(self.cfg, stage=stage, rank=self.rank, world_size=self.world_size)
         self.is_iterable_dataset = isinstance(self.train_loader.dataset, IterableDataset)
 
+    def save_checkpoint(self, model_components, optimizer, lr_scheduler, epoch, step, out_path):
+        """Save full training state for resumption."""
+        if self.rank != 0:
+            return
+        out_path = Path(out_path)
+        out_path.mkdir(parents=True, exist_ok=True)
+
+        checkpoint = {
+            'epoch': epoch,
+            'step': step,
+            'model_states': {
+                component.__class__.__name__: component.state_dict()
+                for component in model_components
+            },
+            'optimizer': optimizer.state_dict(),
+        }
+        if lr_scheduler is not None:
+            checkpoint['lr_scheduler'] = lr_scheduler.state_dict()
+
+        tmp_path = out_path / "latest_tmp.pt"
+        torch.save(checkpoint, tmp_path)
+        tmp_path.rename(out_path / "latest.pt")
+        OmegaConf.save(self.cfg, out_path / "config.yaml")
+        distprint(f"Checkpoint saved at epoch {epoch}, step {step} to {out_path}", local_rank=self.rank)
+
+    def load_checkpoint(self, model_components, optimizer, lr_scheduler, out_path):
+        """Load training state from latest checkpoint. Returns (start_epoch, start_step) or (0, 0)."""
+        ckpt_path = Path(out_path) / "latest.pt"
+        if not ckpt_path.exists():
+            return 0, 0
+
+        distprint(f"Resuming from checkpoint {ckpt_path}", local_rank=self.rank)
+        checkpoint = torch.load(ckpt_path, map_location=f"cuda:{self.rank}")
+
+        for component in model_components:
+            name = component.__class__.__name__
+            if name in checkpoint['model_states']:
+                state = checkpoint['model_states'][name]
+                state = {k.replace("module.", ""): v for k, v in state.items()}
+                component.load_state_dict(state)
+
+        optimizer.load_state_dict(checkpoint['optimizer'])
+
+        if lr_scheduler is not None and 'lr_scheduler' in checkpoint:
+            lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
+
+        start_epoch = checkpoint['epoch'] + 1
+        start_step = checkpoint.get('step', 0)
+        distprint(f"Resumed from epoch {checkpoint['epoch']}, step {start_step}", local_rank=self.rank)
+        return start_epoch, start_step
+
     def train(self):
         if self.is_iterable_dataset:
             distprint(f"Running on {self.world_size} devices, batch size {self.train_cfg.batch_size}", local_rank=self.rank)
@@ -72,7 +124,7 @@ class Trainer:
         if self.train_cfg.get("run_name", None) is not None:
             run_name = f"{run_name}-{self.train_cfg.run_name}"
         if self.rank == 0 and not self.cfg.dry_run:
-            wandb.init(project="physics-jepa" if 'seed' not in self.cfg.out_path else "physics-jepa-seeds",
+            wandb.init(project=self.cfg.get("wandb_project", "physics-jepa"),
                 name=run_name,
                 config=OmegaConf.to_container(self.cfg))
 
@@ -100,10 +152,9 @@ class Trainer:
             warmup_steps = max(self.train_cfg.get("lr_scheduler_warmup_steps", 0), warmup_steps_from_epochs)
             warmup_updates = (warmup_steps + grad_accum_steps - 1) // grad_accum_steps
             total_updates = (steps + grad_accum_steps - 1) // grad_accum_steps
-            
+
             distprint(f"using cosine scheduler with max_lr {max_lr}, min_lr {min_lr}, warmup_steps {warmup_updates}, total_updates {total_updates}", local_rank=self.rank)
 
-            # Use the existing cosine_scheduler function
             lr_scheduler = CosineLRScheduler(
                 optimizer,
                 step=self.train_cfg.get("start_step", 0) // grad_accum_steps,
@@ -119,13 +170,24 @@ class Trainer:
         if not self.is_iterable_dataset:
             distprint(f"starting to train w/ {len(self.train_loader)} batches per device", local_rank=self.rank)
 
-        date_str = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-        out_path = Path(self.cfg.out_path) / f"{run_name}_{date_str}"
+        # Deterministic output path so resumed jobs find existing checkpoints
+        out_path = Path(self.cfg.out_path) / run_name
+
+        # Auto-resume from latest checkpoint if available
+        start_epoch, _ = self.load_checkpoint(model_components, optimizer, lr_scheduler, out_path)
+
+        # Register SIGTERM handler for SLURM preemption — saves checkpoint before exit
+        self._save_requested = False
+        def _sigterm_handler(signum, frame):
+            distprint("SIGTERM received — saving checkpoint before exit", local_rank=self.rank)
+            self._save_requested = True
+        signal.signal(signal.SIGTERM, _sigterm_handler)
+        signal.signal(signal.SIGUSR1, _sigterm_handler)
 
         if self.rank == 0:
-            epochs = tqdm(range(self.train_cfg.num_epochs))
+            epochs = tqdm(range(start_epoch, self.train_cfg.num_epochs), initial=start_epoch, total=self.train_cfg.num_epochs)
         else:
-            epochs = range(self.train_cfg.num_epochs)
+            epochs = range(start_epoch, self.train_cfg.num_epochs)
 
         for epoch in epochs:
             if self.train_cfg.get("not_from_embeddings", False): # compute embeddings at each epoch
@@ -183,20 +245,24 @@ class Trainer:
                             # Calculate expected time to completion at first report
                             self.time_to_completion(start_time, i, steps)
                         start_time = datetime.datetime.now()
-                
+
                 if self.train_cfg.get("save_every_steps", None) is not None and i % self.train_cfg.save_every_steps == 0:
                     distprint(f"save_every_steps: {self.train_cfg.save_every_steps}, i: {i}", local_rank=self.rank)
+                    self.save_checkpoint(model_components, optimizer, lr_scheduler, epoch, i, out_path)
                     if self.rank == 0:
-                        if not out_path.exists():
-                            out_path.mkdir(parents=True)
-                            cfg_path = out_path / f"config.yaml"
-                            OmegaConf.save(self.cfg, cfg_path)
                         for component in model_components:
                             torch.save(component.state_dict(), out_path / f"{component.__class__.__name__}_step{i}.pth")
-                        print(f"checkpoint at step {i} saved to {out_path}")
 
                 if self.train_cfg.get("steps", None) is not None and i > self.train_cfg.steps:
                     break
+
+                # Handle SIGTERM/SIGUSR1 — save and exit gracefully
+                if self._save_requested:
+                    self.save_checkpoint(model_components, optimizer, lr_scheduler, epoch, i, out_path)
+                    distprint("Checkpoint saved after signal — exiting", local_rank=self.rank)
+                    if self.world_size > 1:
+                        dist.destroy_process_group()
+                    raise SystemExit(0)
 
             for loss_name, loss_values in epoch_losses_dict.items():
                 epoch_losses_dict[loss_name] = torch.stack(loss_values).mean().item()
@@ -206,13 +272,13 @@ class Trainer:
                 distprint(f"Epoch {epoch} val loss: {val_losses_dict['val/loss']}", local_rank=self.rank)
 
             if self.rank == 0 and (epoch+1) % self.train_cfg.save_every == 0 and epoch > 0:
-                if not out_path.exists():
-                    out_path.mkdir(parents=True)
-                    cfg_path = out_path / f"config.yaml"
-                    OmegaConf.save(self.cfg, cfg_path)
-                for i, component in enumerate(model_components):
+                # Save resumable checkpoint + individual component weights
+                self.save_checkpoint(model_components, optimizer, lr_scheduler, epoch, 0, out_path)
+                for component in model_components:
                     torch.save(component.state_dict(), out_path / f"{component.__class__.__name__}_{epoch}.pth")
 
+        # Save final checkpoint
+        self.save_checkpoint(model_components, optimizer, lr_scheduler, self.train_cfg.num_epochs - 1, 0, out_path)
         distprint(f"all checkpoints saved to {out_path}", local_rank=self.rank)
 
     def step(self, batch, model_components, loss_fn, device, log=False):

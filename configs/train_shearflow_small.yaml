@@ -49,5 +49,6 @@ ft:
   run_name: shearflow-jepa-FT-noise-std-1.0-gaussianmatching
   batch_size: 64
 
+wandb_project: "physics-jepa"
 out_path: "./checkpoints"
 cache_path: "./dataset_cache"

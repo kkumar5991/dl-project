@@ -9,6 +9,7 @@
 #SBATCH --output=/scratch/%u/logs/vjepa2_%j.out
 #SBATCH --error=/scratch/%u/logs/vjepa2_%j.err
 #SBATCH --requeue
+#SBATCH --signal=B:SIGTERM@120
 
 # ── Environment ────────────────────────────────────────────────────────────────
 NETID=$(whoami)
@@ -34,4 +35,9 @@ singularity exec \
         export PATH=\$HOME/.local/bin:\$PATH
 
         bash scripts/active_matter/run_train_jepa.sh
-    "
+    " &
+
+# Wait for the child and forward signals so the Python process can checkpoint
+CHILD_PID=$!
+trap 'kill -TERM ${CHILD_PID}; wait ${CHILD_PID}' SIGTERM SIGUSR1
+wait ${CHILD_PID}

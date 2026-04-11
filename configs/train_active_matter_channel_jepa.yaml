@@ -50,5 +50,6 @@ ft:
   run_name: "channel-masked-jepa"
   distributed: false
 
+wandb_project: "physics-jepa"
 out_path: "./checkpoints"
 cache_path: "./dataset_cache"

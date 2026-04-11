@@ -24,5 +24,6 @@ ft:
   run_name: shearflow-videomae-noise-std-0.1-randominit
 
 
+wandb_project: "physics-jepa"
 out_path: "./checkpoints"
 cache_path: "./dataset_cache"

@@ -52,5 +52,6 @@ ft:
   run_name: shearflow-channel-jepa-FT
   batch_size: 64
 
+wandb_project: "physics-jepa"
 out_path: "./checkpoints"
 cache_path: "./dataset_cache"
