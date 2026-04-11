@@ -32,10 +32,10 @@ singularity exec \
         cd /scratch/${NETID}/dl-project/dl-project
         pip install --user --break-system-packages -r requirements.txt
         export PATH=\$HOME/.local/bin:\$PATH
-        python -m physics_jepa.utils.generate_subset_config \
-            --dataset activematter \
+        python generate_subset_config.py \
+            --dataset active_matter \
+            --num_frames 16 \
             --split train \
-            --num_samples 1000 \
-            --output_path configs/train_activematter_small.yaml
+            --output subset_config.json
         
     "
