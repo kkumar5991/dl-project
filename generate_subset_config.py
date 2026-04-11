@@ -146,7 +146,7 @@ def main():
     # ── Summary ──
     print("Kept trajectories per (alpha, zeta):")
     for (alpha, zeta), trajs in sorted(kept_trajs.items()):
-        print(f"  alpha={alpha:3d}, zeta={zeta:2d} → {len(trajs)} traj(s)")
+        print(f"  alpha={alpha:5.1f}, zeta={zeta:5.1f} → {len(trajs)} traj(s)")
 
     # Count windows
     print(f"\nTotal windows selected : {len(selected)}")
