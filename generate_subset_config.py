@@ -25,10 +25,10 @@ from pathlib import Path
 
 # ── Parameter grid to keep ────────────────────────────────────────────────────
 # All 5 alpha values, 5 evenly-spaced zeta values → covers full phase space
-ALPHA_KEEP = {-1, -2, -3, -4, -5}
-ZETA_KEEP  = {1, 5, 9, 13, 17}
-N_TRAJ_PER_PARAM = 2   # how many distinct (obj_id, t0) trajectories to keep
-                        # per (alpha, zeta) pair. Set to None to keep all.
+ALPHA_KEEP = {-1.0, -2.0, -3.0, -4.0, -5.0}
+ZETA_KEEP  = {1.0, 5.0, 9.0, 13.0, 17.0}
+N_TRAJ_PER_PARAM = None   # how many distinct (obj_id, t0) trajectories to keep
+                           # per (alpha, zeta) pair. Set to None to keep all.
 
 # ── Tolerances for float param matching ───────────────────────────────────────
 ALPHA_TOL = 0.1
@@ -101,7 +101,23 @@ def main():
     parser.add_argument("--output",     default="subset_config.json")
     parser.add_argument("--stride",     type=int, default=None,
                         help="Temporal stride (default: num_frames, i.e. non-overlapping)")
+    parser.add_argument("--alpha",      type=float, nargs="+", default=None,
+                        help="Alpha values to keep (default: -1 -2 -3 -4 -5)")
+    parser.add_argument("--zeta",       type=float, nargs="+", default=None,
+                        help="Zeta values to keep (default: 1 5 9 13 17)")
+    parser.add_argument("--n_traj",     type=int, default=None,
+                        help="Max trajectories per (alpha,zeta) pair (default: all)")
     args = parser.parse_args()
+
+    if args.alpha is not None:
+        ALPHA_KEEP.clear()
+        ALPHA_KEEP.update(args.alpha)
+    if args.zeta is not None:
+        ZETA_KEEP.clear()
+        ZETA_KEEP.update(args.zeta)
+    global N_TRAJ_PER_PARAM
+    if args.n_traj is not None:
+        N_TRAJ_PER_PARAM = args.n_traj
 
     well_data_dir = os.environ.get("THE_WELL_DATA_DIR")
     if well_data_dir is None:
