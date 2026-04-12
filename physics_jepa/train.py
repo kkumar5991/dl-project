@@ -7,6 +7,8 @@ from torch.nn import MSELoss
 
 import os
 import signal
+import random
+import numpy as np
 from pathlib import Path
 from tqdm import tqdm
 from einops import rearrange
@@ -44,6 +46,12 @@ class Trainer:
             self.rank = 0
             self.world_size = 1
             torch.cuda.set_device(0)
+
+        seed = self.cfg.get("seed", 42)
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        random.seed(seed)
+        np.random.seed(seed)
 
         distprint(OmegaConf.to_yaml(self.cfg, resolve=True), local_rank=self.rank)
 
