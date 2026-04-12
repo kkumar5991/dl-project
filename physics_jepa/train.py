@@ -198,6 +198,8 @@ class Trainer:
             epochs = range(start_epoch, self.train_cfg.num_epochs)
 
         for epoch in epochs:
+            if hasattr(self.train_loader, 'sampler') and hasattr(self.train_loader.sampler, 'set_epoch'):
+                self.train_loader.sampler.set_epoch(epoch)
             if self.train_cfg.get("not_from_embeddings", False): # compute embeddings at each epoch
                 model_components[0].eval()
                 model_components[1].train()
