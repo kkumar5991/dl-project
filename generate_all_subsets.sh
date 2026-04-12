@@ -34,7 +34,7 @@ singularity exec \
         pip install --user --break-system-packages -r requirements.txt 2>/dev/null
         export PATH=\$HOME/.local/bin:\$PATH
 
-        SCRIPT='python3 generate_subset_config.py --dataset active_matter --num_frames 16 --split train'
+        SCRIPT='python3 generate_subset_config.py --dataset active_matter --num_frames 16 --split train --stride 1'
 
         mkdir -p subset_configs configs/dataset/subset_configs
         echo '=== Generating subsets =='

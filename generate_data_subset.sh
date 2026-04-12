@@ -36,6 +36,7 @@ singularity exec \
             --dataset active_matter \
             --num_frames 16 \
             --split train \
+            --stride 1 \
             --output subset_config.json
         
     "

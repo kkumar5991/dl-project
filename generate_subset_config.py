@@ -40,12 +40,11 @@ def build_subset_indices(dataset, alpha_keep, zeta_keep, n_traj_per_param):
     Walk dataset.index and select entries whose file's physical params
     match the desired (alpha, zeta) grid.
 
-    dataset.physical_params_idx: Dict[filename -> [zeta_val, alpha_val]]
+    dataset.physical_params_idx: Dict[filename -> [alpha_val, zeta_val]]
     (order matches the HDF5 scalars keys alphabetically, with L excluded)
 
-    Note: check the printed "Physical params" output when you first run
-    the full dataset to confirm key ordering — it may be [alpha, zeta]
-    depending on your HDF5 files. Adjust ALPHA_IDX / ZETA_IDX below.
+    Note: confirmed from training logs — params are [alpha, zeta] at indices 0 and 1.
+    Adjust ALPHA_IDX / ZETA_IDX below if your dataset differs.
     """
     ALPHA_IDX = 0   # ← index of alpha in physical_params_idx values
     ZETA_IDX  = 1   # ← index of zeta  in physical_params_idx values
@@ -80,12 +79,12 @@ def build_subset_indices(dataset, alpha_keep, zeta_keep, n_traj_per_param):
         traj_key = (file_id, obj_id)
         trajs_for_param = kept_trajs.setdefault(param_key, set())
 
-        # Enforce trajectory cap
-        if n_traj_per_param is not None:
-            if traj_key not in trajs_for_param:
-                if len(trajs_for_param) >= n_traj_per_param:
-                    continue  # already have enough distinct trajectories
-                trajs_for_param.add(traj_key)
+        # Track trajectory for summary reporting (always)
+        if traj_key not in trajs_for_param:
+            # Enforce trajectory cap if set
+            if n_traj_per_param is not None and len(trajs_for_param) >= n_traj_per_param:
+                continue  # already have enough distinct trajectories
+            trajs_for_param.add(traj_key)
 
         selected.append(flat_idx)
 
