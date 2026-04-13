@@ -47,7 +47,7 @@ ft:
   # channel-masked JEPA settings
   channel_masked: false
   field_masked: true
-  inverse_masked: true
+  inverse_target: true
   ema_momentum: 0.996
   run_name: "channel-masked-jepa"
   distributed: false

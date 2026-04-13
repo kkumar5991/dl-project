@@ -30,7 +30,7 @@ train:
   noise_std: 1.0
   channel_masked: false
   field_masked: true
-  inverse_masked: true
+  inverse_target: true
   run_name: "channel-masked-subset"
   distributed: true
 
