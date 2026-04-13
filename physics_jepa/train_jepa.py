@@ -16,54 +16,66 @@ class MaskToken(nn.Module):
 
     def forward(self, x):
         """Fill x: (B, T, H, W) with the learned mask value."""
-        return self.value.expand_as(x)
+        return self.value.view(1, 1, 1, 1).expand_as(x)
 
 class JepaTrainer(Trainer):
     def __init__(self, cfg):
         super().__init__(cfg)
-        self.channel_masked      = cfg.train.get("channel_masked",      False)
-        self.channel_mask_prob   = cfg.train.get("channel_mask_prob",   0.5)
-        self.channel_loss_weight = cfg.train.get("channel_loss_weight", 1.0)
-        self.num_chans           = cfg.dataset.num_chans
+        self.channel_masked   = cfg.train.get("channel_masked",   False)
+        self.field_masked     = cfg.train.get("field_masked",     False)
+        self.inverse_target   = cfg.train.get("inverse_target",   False)
+        self.num_chans        = cfg.dataset.num_chans
+        self.num_fields       = 4  # HARDCODED: for active matter.
+        self.fields           = [[0], [1,2], [3,4,5,6], [7,8,9,10]]  # concentration, velocity, orientation, strain
 
     def get_model_components(self):
         model_components, loss_fn = super().get_model_components()
-        if self.channel_masked:
+        if self.channel_masked or self.field_masked:
             model_components.append(MaskToken())
         return model_components, loss_fn
 
     def pred_fn(self, batch, model_components, loss_fn):
-        if self.channel_masked:
+        if self.channel_masked or self.field_masked:
             encoder, predictor, mask_token = model_components
         else:
             encoder, predictor = model_components
 
-        ctx_embed = encoder(batch['context'])
-        tgt_embed = encoder(batch['target'])
+        chosen_field = None
+
+        # masking ctx input
+        if self.channel_masked:
+            masked_channel = torch.randint(0, self.num_chans, (1,)).item()
+            ctx_input = batch['context'].clone()
+            ctx_input[:, masked_channel] = mask_token(ctx_input[:, masked_channel])
+        elif self.field_masked:
+            chosen_field = torch.randint(0, self.num_fields, (1,)).item()
+            ctx_input = batch['context'].clone()
+            for chan in self.fields[chosen_field]:
+                ctx_input[:, chan] = mask_token(ctx_input[:, chan])
+        else:
+            ctx_input = batch['context']
+
+        # masking target input (inverse of masked field in ctx)
+        if self.inverse_target:
+            if chosen_field is None:
+                target_input = batch['target']
+                print("Warning: inverse_target is True but no field masked in encoder. Try setting field_masked=True.")
+            else:
+                target_input = batch['target'].clone()
+                for chan in range(self.num_chans):
+                    if chan not in self.fields[chosen_field]:
+                        target_input[:, chan] = mask_token(target_input[:, chan])
+        else:
+            target_input = batch['target']
+
+        ctx_embed = encoder(ctx_input)
+        tgt_embed = encoder(target_input)
         pred = predictor(ctx_embed)
-        
-        # Compute loss on projected embeddings
+
         if len(pred.shape) < 5:
             loss_dict = loss_fn(pred.unsqueeze(2), tgt_embed.unsqueeze(2))
         else:
             loss_dict = loss_fn(pred, tgt_embed)
-
-        # Optional channel-masked auxiliary loss
-        if self.channel_masked and self.num_chans > 1 and torch.rand(1).item() < self.channel_mask_prob:
-            masked_channel = torch.randint(0, self.num_chans, (1,)).item() #Select random channel to mask
-            ctx_masked = batch['context'].clone()
-            ctx_masked[:, masked_channel] = mask_token(ctx_masked[:, masked_channel])# use a mask token to replace the masked channel
-            pred_masked = predictor(encoder(ctx_masked))
-
-            if len(pred_masked.shape) < 5:
-                channel_loss_dict = loss_fn(pred_masked.unsqueeze(2), tgt_embed.unsqueeze(2))
-            else:
-                channel_loss_dict = loss_fn(pred_masked, tgt_embed)
-
-            loss_dict['loss'] = loss_dict['loss'] + self.channel_loss_weight * channel_loss_dict['loss']
-            loss_dict['channel_loss'] = channel_loss_dict['loss'].detach()
-        else:
-            loss_dict['channel_loss'] = torch.tensor(0.0, device=batch['context'].device)
 
         return pred, loss_dict
 
