@@ -28,9 +28,9 @@ train:
   lr: 1e-3 # following 1e-3 * global_batch_size/256 rule
   weight_decay: 0.05
   noise_std: 1.0
-  channel_masked: true
-  channel_mask_prob: 0.5
-  channel_loss_weight: 1.0
+  channel_masked: false
+  field_masked: true
+  inverse_masked: true
   run_name: "channel-masked-subset"
   distributed: true
 

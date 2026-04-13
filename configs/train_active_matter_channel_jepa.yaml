@@ -28,8 +28,9 @@ train:
   weight_decay: 0.05
   noise_std: 1.0
   # channel-masked JEPA settings
-  channel_mask_prob: 0.5
-  channel_loss_weight: 1.0
+  channel_masked: false
+  field_masked: true
+  inverse_masked: true
   ema_momentum: 0.996
   run_name: "channel-masked-jepa"
   distributed: true
@@ -44,8 +45,9 @@ ft:
   weight_decay: 0.01
   noise_std: 1.0
   # channel-masked JEPA settings
-  channel_mask_prob: 0.5
-  channel_loss_weight: 1.0
+  channel_masked: false
+  field_masked: true
+  inverse_masked: true
   ema_momentum: 0.996
   run_name: "channel-masked-jepa"
   distributed: false
