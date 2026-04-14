@@ -26,10 +26,13 @@ class FieldConditionedPredictor(nn.Module):
         dim = predictor.conv[0].in_channels
         self.field_embed = nn.Embedding(num_fields, dim)
 
+
     def forward(self, x, field_id=None):
         if field_id is not None:
-            fid = torch.tensor([field_id], device=x.device) \
-                  if isinstance(field_id, int) else field_id
+            if isinstance(field_id, int):
+                fid = torch.tensor([field_id], device=x.device)
+            else:
+                fid = field_id.to(x.device)
             bias = self.field_embed(fid).view(1, -1, 1, 1)
             x = x + bias
         return self.predictor(x)
