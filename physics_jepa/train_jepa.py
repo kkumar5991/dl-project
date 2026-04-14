@@ -51,10 +51,10 @@ class JepaTrainer(Trainer):
         model_components, loss_fn = super().get_model_components()
         if self.field_masked:
             encoder = model_components[0]
-            predictor = FieldConditionedPredictor(model_components[1], num_fields=self.num_fields)
+            predictor = FieldConditionedPredictor(model_components[1], num_fields=self.num_fields).to(self.rank)
             model_components = [encoder, predictor]
         if (self.channel_masked or self.field_masked) and self.learnable_mask:
-            model_components.append(MaskToken())
+            model_components.append(MaskToken().to(self.rank))
         return model_components, loss_fn
 
     def pred_fn(self, batch, model_components, loss_fn):
