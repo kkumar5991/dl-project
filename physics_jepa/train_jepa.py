@@ -16,26 +16,46 @@ class MaskToken(nn.Module):
 
     def forward(self, x):
         """Fill x: (B, T, H, W) with the learned mask value."""
-        return self.value.view(1, 1, 1, 1).expand_as(x)
+        return self.value.view(1, 1, 1, 1).expand_as(x) 
 
+class FieldConditionedPredictor(nn.Module):
+    def __init__(self, predictor, num_fields=4):
+        super().__init__()
+        self.predictor = predictor
+        # get dim from predictor's first conv weight
+        dim = predictor.conv[0].in_channels
+        self.field_embed = nn.Embedding(num_fields, dim)
+
+    def forward(self, x, field_id=None):
+        if field_id is not None:
+            fid = torch.tensor([field_id], device=x.device) \
+                  if isinstance(field_id, int) else field_id
+            bias = self.field_embed(fid).view(1, -1, 1, 1)
+            x = x + bias
+        return self.predictor(x)
 class JepaTrainer(Trainer):
     def __init__(self, cfg):
         super().__init__(cfg)
         self.channel_masked   = cfg.train.get("channel_masked",   False)
         self.field_masked     = cfg.train.get("field_masked",     False)
         self.inverse_target   = cfg.train.get("inverse_target",   False)
+        self.learnable_mask   = cfg.train.get("learnable_mask",   False)
         self.num_chans        = cfg.dataset.num_chans
         self.num_fields       = 4  # HARDCODED: for active matter.
         self.fields           = [[0], [1,2], [3,4,5,6], [7,8,9,10]]  # concentration, velocity, orientation, strain
 
     def get_model_components(self):
         model_components, loss_fn = super().get_model_components()
-        if self.channel_masked or self.field_masked:
+        if self.field_masked:
+            encoder = model_components[0]
+            predictor = FieldConditionedPredictor(model_components[1], num_fields=self.num_fields)
+            model_components = [encoder, predictor]
+        if (self.channel_masked or self.field_masked) and self.learnable_mask:
             model_components.append(MaskToken())
         return model_components, loss_fn
 
     def pred_fn(self, batch, model_components, loss_fn):
-        if self.channel_masked or self.field_masked:
+        if (self.channel_masked or self.field_masked) and self.learnable_mask:
             encoder, predictor, mask_token = model_components
         else:
             encoder, predictor = model_components
@@ -46,12 +66,12 @@ class JepaTrainer(Trainer):
         if self.channel_masked:
             masked_channel = torch.randint(0, self.num_chans, (1,)).item()
             ctx_input = batch['context'].clone()
-            ctx_input[:, masked_channel] = mask_token(ctx_input[:, masked_channel])
+            ctx_input[:, masked_channel] = mask_token(ctx_input[:, masked_channel]) if self.learnable_mask else 0.0
         elif self.field_masked:
             chosen_field = torch.randint(0, self.num_fields, (1,)).item()
             ctx_input = batch['context'].clone()
             for chan in self.fields[chosen_field]:
-                ctx_input[:, chan] = mask_token(ctx_input[:, chan])
+                ctx_input[:, chan] = mask_token(ctx_input[:, chan]) if self.learnable_mask else 0.0
         else:
             ctx_input = batch['context']
 
@@ -64,13 +84,16 @@ class JepaTrainer(Trainer):
                 target_input = batch['target'].clone()
                 for chan in range(self.num_chans):
                     if chan not in self.fields[chosen_field]:
-                        target_input[:, chan] = mask_token(target_input[:, chan])
+                        target_input[:, chan] = mask_token(target_input[:, chan]) if self.learnable_mask else 0.0
         else:
             target_input = batch['target']
 
         ctx_embed = encoder(ctx_input)
         tgt_embed = encoder(target_input)
-        pred = predictor(ctx_embed)
+        if self.field_masked:
+            pred = predictor(ctx_embed, field_id=chosen_field)
+        else:
+            pred = predictor(ctx_embed)
 
         if len(pred.shape) < 5:
             loss_dict = loss_fn(pred.unsqueeze(2), tgt_embed.unsqueeze(2))
@@ -85,8 +108,6 @@ if __name__ == "__main__":
     parser.add_argument("overrides", nargs="*")
     parser.add_argument("--encoder_path", type=str, default=None)
     parser.add_argument("--predictor_path", type=str, default=None)
-    parser.add_argument("--channel_masked", action="store_true",
-                        help="Enable channel-masked auxiliary loss")
     parser.add_argument("--dry_run", action="store_true")
     args = parser.parse_args()
 
@@ -97,7 +118,6 @@ if __name__ == "__main__":
     # cfg.train.predictor_path = args.predictor_path
     
     cfg.model.objective = "jepa"
-    cfg.train.channel_masked = args.channel_masked
 
     print(OmegaConf.to_yaml(cfg, resolve=True))
 

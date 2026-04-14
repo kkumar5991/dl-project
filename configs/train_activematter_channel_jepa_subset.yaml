@@ -31,6 +31,7 @@ train:
   channel_masked: false
   field_masked: true
   inverse_target: true
+  learnable_mask: false
   run_name: "channel-masked-subset"
   distributed: true
 

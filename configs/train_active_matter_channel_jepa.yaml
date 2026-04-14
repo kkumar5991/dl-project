@@ -31,6 +31,7 @@ train:
   channel_masked: false
   field_masked: true
   inverse_masked: true
+  learnable_mask: false
   ema_momentum: 0.996
   run_name: "channel-masked-jepa"
   distributed: true
