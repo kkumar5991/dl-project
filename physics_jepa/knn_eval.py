@@ -156,7 +156,7 @@ class KNNMixin:
             # -- t-SNE scatter plots of val embeddings --
             print("Computing t-SNE projection of val embeddings...")
             tsne = TSNE(n_components=2, perplexity=min(30, len(val_embeddings) - 1),
-                        random_state=self.seed, n_iter=1000)
+                        random_state=self.seed, max_iter=1000)
             coords = tsne.fit_transform(val_embeddings)
 
             if task == "regression":
