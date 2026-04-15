@@ -159,6 +159,8 @@ class KNNMixin:
                         random_state=self.seed, max_iter=1000)
             coords = tsne.fit_transform(val_embeddings)
 
+            tsne_log = {}
+
             # One scatter per physical parameter, coloured by continuous value
             for j, name in enumerate(param_names):
                 fig, ax = plt.subplots(figsize=(8, 6))
@@ -170,7 +172,7 @@ class KNNMixin:
                 ax.set_xlabel("t-SNE 1")
                 ax.set_ylabel("t-SNE 2")
                 fig.tight_layout()
-                wandb.log({f"knn/tsne_{name}": wandb.Image(fig)})
+                tsne_log[f"knn/tsne_{name}"] = wandb.Image(fig)
                 plt.close(fig)
 
             if task in ("classification", "binary_classification"):
@@ -187,8 +189,11 @@ class KNNMixin:
                 ax.set_xlabel("t-SNE 1")
                 ax.set_ylabel("t-SNE 2")
                 fig.tight_layout()
-                wandb.log({"knn/tsne_classes": wandb.Image(fig)})
+                tsne_log["knn/tsne_classes"] = wandb.Image(fig)
                 plt.close(fig)
+
+            # Log all t-SNE plots in a single call so they appear together
+            wandb.log(tsne_log)
 
             wandb.finish()
 
