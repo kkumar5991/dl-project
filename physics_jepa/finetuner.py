@@ -476,7 +476,11 @@ class JepaFinetuner(BaseFinetuner):
         )
         if self.trained_model_path is not None:
             print(f"loading state dict from {self.trained_model_path}", flush=True)
-            state_dict = torch.load(self.trained_model_path)
+            checkpoint = torch.load(self.trained_model_path, map_location="cpu")
+            if "model_states" in checkpoint:
+                state_dict = checkpoint["model_states"]["encoder"]
+            else:
+                state_dict = checkpoint
             state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
             encoder.load_state_dict(state_dict)
         else:
