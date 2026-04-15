@@ -24,7 +24,7 @@ class FieldConditionedPredictor(nn.Module):
         self.predictor = predictor
         # get dim from predictor's first conv weight
         dim = predictor.conv[0].in_channels
-        self.field_embed = nn.Embedding(num_fields, dim)
+        self.field_embed = nn.Embedding(num_fields+1, dim) # +1 for "no field masked" case
 
 
     def forward(self, x, field_id=None):
@@ -46,7 +46,10 @@ class JepaTrainer(Trainer):
         self.num_chans        = cfg.dataset.num_chans
         self.num_fields       = 4  # HARDCODED: for active matter.
         self.fields           = [[0], [1,2], [3,4,5,6], [7,8,9,10]]  # concentration, velocity, orientation, strain
-
+        self.to_apply_mask = self.channel_masked or self.field_masked
+        self.apply_mask       = self.to_apply_mask
+        self.step_counter = 0
+        self.mask_period = cfg.train.get("mask_period", 1)  # mask once every N steps
     def get_model_components(self):
         model_components, loss_fn = super().get_model_components()
         if self.field_masked:
@@ -64,13 +67,12 @@ class JepaTrainer(Trainer):
             encoder, predictor = model_components
 
         chosen_field = None
-
         # masking ctx input
-        if self.channel_masked:
+        if self.channel_masked and self.apply_mask:
             masked_channel = torch.randint(0, self.num_chans, (1,)).item()
             ctx_input = batch['context'].clone()
             ctx_input[:, masked_channel] = mask_token(ctx_input[:, masked_channel]) if self.learnable_mask else 0.0
-        elif self.field_masked:
+        elif self.field_masked and self.apply_mask:
             chosen_field = torch.randint(0, self.num_fields, (1,)).item()
             ctx_input = batch['context'].clone()
             for chan in self.fields[chosen_field]:
@@ -79,7 +81,7 @@ class JepaTrainer(Trainer):
             ctx_input = batch['context']
 
         # masking target input (inverse of masked field in ctx)
-        if self.inverse_target:
+        if self.inverse_target and self.apply_mask:
             if chosen_field is None:
                 target_input = batch['target']
                 print("Warning: inverse_target is True but no field masked in encoder. Try setting field_masked=True.")
@@ -94,6 +96,8 @@ class JepaTrainer(Trainer):
         ctx_embed = encoder(ctx_input)
         tgt_embed = encoder(target_input)
         if self.field_masked:
+            if not self.apply_mask:
+                chosen_field = self.num_fields  # index 4: "no field masked" token
             pred = predictor(ctx_embed, field_id=chosen_field)
         else:
             pred = predictor(ctx_embed)
@@ -103,6 +107,9 @@ class JepaTrainer(Trainer):
         else:
             loss_dict = loss_fn(pred, tgt_embed)
 
+        if self.to_apply_mask:
+            self.step_counter += 1
+            self.apply_mask = (self.step_counter % self.mask_period == 0)
         return pred, loss_dict
 
 if __name__ == "__main__":
