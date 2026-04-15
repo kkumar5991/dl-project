@@ -49,7 +49,7 @@ ft:
   channel_masked: false
   field_masked: true
   inverse_target: true
-  mask_pred: 2
+  mask_period: 2
   ema_momentum: 0.996
   run_name: "channel-masked-jepa"
   distributed: false
