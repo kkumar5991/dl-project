@@ -46,7 +46,7 @@ class KNNMixin:
         val_embeddings = scaler.transform(val_embeddings)
 
         # KNN hyper-parameters from config
-        k_values = self.cfg.ft.get("k_values", [1, 3, 5, 10, 20])
+        k_values = self.cfg.ft.get("k_values", [1, 3, 5, 10, 20, 30, 40, 50, 60])
         task = self.cfg.ft.get("task", "regression")
         metric = self.cfg.ft.get("knn_metric", "euclidean")
         weights = self.cfg.ft.get("knn_weights", "distance")
@@ -159,22 +159,22 @@ class KNNMixin:
                         random_state=self.seed, max_iter=1000)
             coords = tsne.fit_transform(val_embeddings)
 
-            if task == "regression":
-                # One scatter per physical parameter, coloured by continuous value
-                for j, name in enumerate(param_names):
-                    fig, ax = plt.subplots(figsize=(8, 6))
-                    sc = ax.scatter(coords[:, 0], coords[:, 1],
-                                    c=val_labels[:, j], cmap="viridis",
-                                    s=8, alpha=0.7)
-                    plt.colorbar(sc, ax=ax, label=name)
-                    ax.set_title(f"t-SNE coloured by {name}")
-                    ax.set_xlabel("t-SNE 1")
-                    ax.set_ylabel("t-SNE 2")
-                    fig.tight_layout()
-                    wandb.log({f"knn/tsne_{name}": wandb.Image(fig)})
-                    plt.close(fig)
-            else:
-                # Single scatter coloured by discrete class label
+            # One scatter per physical parameter, coloured by continuous value
+            for j, name in enumerate(param_names):
+                fig, ax = plt.subplots(figsize=(8, 6))
+                sc = ax.scatter(coords[:, 0], coords[:, 1],
+                                c=val_labels[:, j], cmap="viridis",
+                                s=8, alpha=0.7)
+                plt.colorbar(sc, ax=ax, label=name)
+                ax.set_title(f"t-SNE coloured by {name}")
+                ax.set_xlabel("t-SNE 1")
+                ax.set_ylabel("t-SNE 2")
+                fig.tight_layout()
+                wandb.log({f"knn/tsne_{name}": wandb.Image(fig)})
+                plt.close(fig)
+
+            if task in ("classification", "binary_classification"):
+                # Additional scatter coloured by discrete class label
                 labels_flat = val_labels.ravel() if val_labels.ndim > 1 and val_labels.shape[1] == 1 else val_labels
                 unique_classes = np.unique(labels_flat)
                 fig, ax = plt.subplots(figsize=(8, 6))
