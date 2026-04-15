@@ -478,7 +478,8 @@ class JepaFinetuner(BaseFinetuner):
             print(f"loading state dict from {self.trained_model_path}", flush=True)
             checkpoint = torch.load(self.trained_model_path, map_location="cpu")
             if "model_states" in checkpoint:
-                state_dict = checkpoint["model_states"]["encoder"]
+                encoder_cls = encoder.__class__.__name__
+                state_dict = checkpoint["model_states"][encoder_cls]
             else:
                 state_dict = checkpoint
             state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
