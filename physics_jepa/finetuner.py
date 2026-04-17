@@ -539,10 +539,13 @@ class JepaFinetuner(BaseFinetuner):
             if self.cfg.ft.get("use_attentive_pooling", False):
                 # reshape to (batch_size, num_tokens, embed_dim)
                 enc_ctx = rearrange(enc_ctx, 'b c h w -> b (h w) c')
-            # Check for NaN values in the encoded context
+            else:
+                # global average pool over spatial (and any temporal) dims -> (B, C)
+                enc_ctx = enc_ctx.flatten(2).mean(dim=-1)
             if torch.isnan(enc_ctx).any():
-                raise ValueError(f"NaN values detected in encoded context. Shape: {enc_ctx.shape}, NaN count: {torch.isnan(enc_ctx).sum()}")
+                raise ValueError(...)
         return enc_ctx
+
 
 
 # VideoMAE Finetuner
