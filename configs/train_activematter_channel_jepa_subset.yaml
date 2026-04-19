@@ -14,7 +14,7 @@ model:
 
 train:
   num_epochs: 30
-  batch_size: 8 # per-device
+  batch_size: 4 # per-device
   report_every: 100
   save_every: 2
   include_labels: false
@@ -30,10 +30,10 @@ train:
   noise_std: 1.0
   channel_masked: false
   field_masked: true
-  inverse_target: true
+  inverse_target: false
   learnable_mask: false
   mask_period: 2
-  run_name: "channel-masked-subset"
+  run_name: "field-mask-0.5masking-no-z"
   distributed: true
 
 ft:

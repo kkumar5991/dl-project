@@ -50,9 +50,10 @@ class JepaTrainer(Trainer):
         self.apply_mask       = self.to_apply_mask
         self.step_counter = 0
         self.mask_period = cfg.train.get("mask_period", 1)  # mask once every N steps
+        self.use_field_z_predictor = cfg.train.get("field_z",False)
     def get_model_components(self):
         model_components, loss_fn = super().get_model_components()
-        if self.field_masked:
+        if self.field_masked and self.use_field_z_predictor:
             encoder = model_components[0]
             predictor = FieldConditionedPredictor(model_components[1], num_fields=self.num_fields).to(self.rank)
             model_components = [encoder, predictor]
@@ -95,7 +96,7 @@ class JepaTrainer(Trainer):
 
         ctx_embed = encoder(ctx_input)
         tgt_embed = encoder(target_input)
-        if self.field_masked:
+        if self.field_masked and self.use_field_z_predictor:
             if not self.apply_mask:
                 chosen_field = self.num_fields  # index 4: "no field masked" token
             pred = predictor(ctx_embed, field_id=chosen_field)
