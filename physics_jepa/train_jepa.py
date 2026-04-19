@@ -46,6 +46,8 @@ class JepaTrainer(Trainer):
         self.num_chans        = cfg.dataset.num_chans
         self.num_fields       = 4  # HARDCODED: for active matter.
         self.fields           = [[0], [1,2], [3,4,5,6], [7,8,9,10]]  # concentration, velocity, orientation, strain
+        # Per-field training: select a subset of input channels
+        self.field_indices    = list(cfg.train.fields) if 'fields' in cfg.train else None
 
     def get_model_components(self):
         model_components, loss_fn = super().get_model_components()
@@ -64,6 +66,12 @@ class JepaTrainer(Trainer):
             encoder, predictor = model_components
 
         chosen_field = None
+
+        # Per-field training: select only the specified channels
+        if self.field_indices is not None:
+            batch = {**batch,
+                     'context': batch['context'][:, self.field_indices],
+                     'target':  batch['target'][:, self.field_indices]}
 
         # masking ctx input
         if self.channel_masked:
