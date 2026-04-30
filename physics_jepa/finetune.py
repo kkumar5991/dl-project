@@ -27,6 +27,11 @@ if __name__ == "__main__":
         finetuner = JepaFinetuner(cfg, trained_model_path=args.trained_model_path)
     elif cfg.model.objective == "videomae":
         finetuner = VideoMAEFinetuner(cfg, trained_model_path=args.trained_model_path)
+    elif cfg.model.objective == "supervised":
+        # The supervised baseline saves a ConvEncoder_{epoch}.pth that loads
+        # cleanly via JepaFinetuner.load_model — reuse the same code path
+        # for linear-probe / kNN re-evaluation of the supervised encoder.
+        finetuner = JepaFinetuner(cfg, trained_model_path=args.trained_model_path)
     else:
         raise ValueError(f"Unknown objective: {cfg.model.objective}")
 

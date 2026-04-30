@@ -3,7 +3,10 @@
 **NYU Deep Learning — Spring 2026 Final Project**
 
 Self-supervised representation learning on the `polymathic-ai/active_matter` dataset
-using a Video JEPA 2 (Joint-Embedding Predictive Architecture) approach.
+using a Video JEPA 2 (Joint-Embedding Predictive Architecture) approach, plus an
+end-to-end supervised baseline. Frozen encoders are evaluated with both **linear
+probe** and **kNN regression** on the (α, ζ) physical parameters, per the project
+spec.
 
 ---
 
@@ -51,33 +54,106 @@ spatiotemporal regions, using an EMA-stabilised target encoder.
 pip install -r requirements.txt
 ```
 
-### 2. Download data (on HPC — run from dtn.torch.hpc.nyu.edu)
+### 2. Download data (on HPC — run from `dtn.torch.hpc.nyu.edu`)
 
 ```bash
 export NETID=<your_netid>
 bash download_data.sh
 ```
 
-### 3. Run training (on HPC)
-
-```bash
-# Interactive
-jupyter notebook vjepa2_active_matter.ipynb
-
-# Batch (SLURM)
-sbatch slurm_train.sh
-```
-
 ---
 
-## Evaluation
+## Running on HPC (SLURM)
 
-Training periodically evaluates frozen representations (every 10 epochs) via:
+All training and evaluation is launched through two SLURM scripts:
 
-- **Linear Probe** — Ridge regression on z-scored α and ζ (MSE)
-- **kNN Regression** — cosine-distance kNN (k=20) on z-scored α and ζ (MSE)
+```bash
+# Self-supervised / supervised pre-training
+sbatch slurm_train.sh
 
-No labels are used during pre-training. The backbone is frozen for evaluation.
+# Linear-probe or kNN evaluation of a frozen encoder
+sbatch slurm_fine_tune.sh
+```
+
+Each SLURM script wraps a Singularity container, sets the env, and at the end
+invokes a single line of the form:
+
+```bash
+bash scripts/active_matter/<run_script>.sh [args]
+```
+
+To switch between pre-training methods or evaluation modes, **edit only that
+final `bash scripts/active_matter/...` line** in the relevant SLURM script.
+The SBATCH directives, container setup, and signal-handling block don't need
+to change.
+
+### `slurm_train.sh` — pre-training
+
+Replace the inner `bash scripts/...` line with one of:
+
+| Goal | Inner command |
+|---|---|
+| V-JEPA (EMA teacher, smooth-L1) | `bash scripts/active_matter/run_train_vjepa.sh` |
+| Original CNN-JEPA (VICReg) | `bash scripts/active_matter/run_train_jepa.sh` |
+| Channel-wise JEPA ablation | `bash scripts/active_matter/run_train_channel_jepa.sh` |
+| Supervised baseline (end-to-end, linear head) | `bash scripts/active_matter/run_train_supervised.sh` |
+
+> kNN cannot be trained end-to-end (no learnable parameters, neighbor selection
+> is non-differentiable), so the only end-to-end "supervised" option is the
+> linear-head one above. kNN appears only on the evaluation side.
+
+### `slurm_fine_tune.sh` — frozen-encoder evaluation
+
+Pass the encoder checkpoint as the script argument. The encoder file is the
+`ConvEncoder_<epoch>.pth` written by training under
+`./checkpoints/<run_name>/`.
+
+| Goal | Inner command |
+|---|---|
+| JEPA / V-JEPA → **linear probe** | `bash scripts/active_matter/run_finetune_jepa_linear.sh <ConvEncoder_xx.pth>` |
+| JEPA / V-JEPA → **kNN regression** | `bash scripts/active_matter/run_finetune_jepa_knn.sh <ConvEncoder_xx.pth>` |
+| Supervised encoder → **linear probe** | `bash scripts/active_matter/run_finetune_supervised_linear.sh <ConvEncoder_xx.pth>` |
+| Supervised encoder → **kNN regression** | `bash scripts/active_matter/run_finetune_supervised_knn.sh <ConvEncoder_xx.pth>` |
+| VideoMAE finetune (legacy) | `bash scripts/active_matter/run_finetune_videomae.sh <ckpt.pth>` |
+
+#### Common Hydra overrides (append to the inner command)
+
+```bash
+# Sweep different k values for kNN
+'ft.n_neighbors_list=[1,5,15]'
+ft.knn_weights=uniform        # default: distance
+ft.knn_metric=cosine          # default: minkowski (L2)
+'ft.n_neighbors_list=null' ft.n_neighbors=10   # single k, no sweep
+
+# Linear probe knobs
+ft.lr=5e-4
+ft.num_epochs=200
+ft.batch_size=64
+
+# Reseed
+--seed 7
+```
+
+Example — kNN eval of a V-JEPA checkpoint with a custom k sweep, by editing
+the inner line in `slurm_fine_tune.sh`:
+
+```bash
+bash scripts/active_matter/run_finetune_jepa_knn.sh \
+    ../checkpoints/active_matter-16frames-cnn-jepa-vjepa-temporal/ConvEncoder_29.pth \
+    'ft.n_neighbors_list=[1,3,5,10,20,50,100]' \
+    ft.knn_weights=uniform
+```
+
+### Logged metrics
+
+For regression tasks, both linear-probe and kNN runs log:
+
+- `val/loss` — mean MSE over both targets in z-scored space
+- `val/loss_dim_0` — MSE on **α** (alpha)
+- `val/loss_dim_1` — MSE on **ζ** (zeta)
+
+kNN additionally logs `knn/k` per step and `best/k`, `best/val_loss`,
+`best/val_loss_dim_*` in `wandb.summary` after the sweep.
 
 ---
 
