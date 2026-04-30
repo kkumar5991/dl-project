@@ -21,6 +21,7 @@ import time
 from typing import List, Sequence
 import re
 from sklearn.metrics import f1_score
+from sklearn.neighbors import KNeighborsRegressor
 
 from .data import EmbeddingsDataset, get_dataset_metadata, get_train_dataloader, get_val_dataloader
 from .model import get_model_and_loss_cnn, get_autoencoder
@@ -99,10 +100,20 @@ class BaseFinetuner(Trainer, ABC):
     def train(self):
         run_name = self.cfg.ft.get("run_name", f"{self.cfg.dataset.name}-{self.cfg.dataset.num_frames}frames-{self.cfg.model.objective + '-FT' if not self.cfg.ft.get('not_from_embeddings', False) else 'supervised'}-{self.cfg.ft.task}{f'-randominit' if self.trained_model_path is None else ''}")
         if self.rank == 0 and not self.cfg.dry_run:
-            wandb.init(project="physics-jepa",
+            wandb.init(project=self.cfg.get("wandb_project", "physics-jepa"),
                 name=run_name,
                 config=OmegaConf.to_container(self.cfg))
-        
+
+        # kNN evaluation is encoder-agnostic and shares the embedding pipeline
+        # with the linear / MLP / attentive heads — only the final fit/predict
+        # differs. Run it inline and short-circuit the gradient-training path.
+        if self.cfg.ft.get("head_type", None) == "knn":
+            self._knn_eval()
+            self.cleanup_embedding_files()
+            if self.world_size > 1:
+                dist.destroy_process_group()
+            return
+
         if self.cfg.ft.get("not_from_embeddings", False):
             encoder = self.get_encoder_and_raw_loaders()
             model_components = [encoder]
@@ -452,6 +463,73 @@ class BaseFinetuner(Trainer, ABC):
         
         return embeddings, all_labels, val_embeddings, val_labels
     
+    def _knn_eval(self):
+        """
+        kNN regression evaluation on frozen-encoder embeddings.
+
+        Reuses get_embeddings() (HDF5 cache, label normalization, etc.) and
+        then fits sklearn's KNeighborsRegressor for each k in
+        ft.n_neighbors_list, logging per-k val MSE plus a best-k summary.
+        Subclasses don't need to override this — the encoder path is fully
+        decided by load_model / _model_inference.
+        """
+        # Force pooled (B, D) features — kNN needs a 1D vector per sample.
+        # Affects how _model_inference reduces, and is part of the cache key.
+        self.cfg.ft.use_attentive_pooling = False
+
+        train_emb, train_labels, val_emb, val_labels = self.get_embeddings()
+
+        train_emb = np.asarray(train_emb).reshape(np.asarray(train_emb).shape[0], -1)
+        val_emb = np.asarray(val_emb).reshape(np.asarray(val_emb).shape[0], -1)
+        train_labels = np.asarray(train_labels)
+        val_labels = np.asarray(val_labels)
+
+        ks = self.cfg.ft.get("n_neighbors_list", None) or [
+            self.cfg.ft.get("n_neighbors", 5)
+        ]
+        weights = self.cfg.ft.get("knn_weights", "distance")
+        metric = self.cfg.ft.get("knn_metric", "minkowski")
+
+        best = {"val/loss": float("inf"), "k": None, "per_dim": []}
+        for k in ks:
+            knn = KNeighborsRegressor(
+                n_neighbors=k, weights=weights, metric=metric, n_jobs=-1
+            )
+            knn.fit(train_emb, train_labels)
+
+            val_pred = knn.predict(val_emb)
+            val_mse = float(((val_pred - val_labels) ** 2).mean())
+            per_dim_mse = ((val_pred - val_labels) ** 2).mean(axis=0)
+
+            train_pred = knn.predict(train_emb)
+            train_mse = float(((train_pred - train_labels) ** 2).mean())
+
+            print(
+                f"kNN k={k} weights={weights}: val MSE={val_mse:.4f} "
+                f"(per-dim {per_dim_mse.tolist()}) train MSE={train_mse:.4f}",
+                flush=True,
+            )
+
+            if self.rank == 0 and not self.cfg.dry_run:
+                log = {"knn/k": k, "val/loss": val_mse, "train/loss": train_mse}
+                for i, m in enumerate(per_dim_mse):
+                    log[f"val/loss_dim_{i}"] = float(m)
+                wandb.log(log)
+
+            if val_mse < best["val/loss"]:
+                best = {
+                    "val/loss": val_mse,
+                    "k": k,
+                    "per_dim": per_dim_mse.tolist(),
+                }
+
+        print(f"best kNN: k={best['k']} val MSE={best['val/loss']:.4f}", flush=True)
+        if self.rank == 0 and not self.cfg.dry_run:
+            wandb.summary["best/k"] = best["k"]
+            wandb.summary["best/val_loss"] = best["val/loss"]
+            for i, m in enumerate(best["per_dim"]):
+                wandb.summary[f"best/val_loss_dim_{i}"] = float(m)
+
     def cleanup_embedding_files(self):
         """Close HDF5 file handles to free up system resources"""
         if hasattr(self, '_train_file'):
@@ -677,4 +755,3 @@ class VideoMAEFinetuner(BaseFinetuner):
                 # Return CLS token for traditional pooling
                 cls_token = encoder.forward_features(ctx)  # (B, embed_dim) - already the CLS token
                 return cls_token
- 
