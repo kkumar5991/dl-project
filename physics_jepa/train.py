@@ -291,6 +291,19 @@ class Trainer:
         self.save_checkpoint(model_components, optimizer, lr_scheduler, self.train_cfg.num_epochs - 1, 0, out_path)
         distprint(f"all checkpoints saved to {out_path}", local_rank=self.rank)
 
+        # Upload final checkpoint to wandb
+        if self.rank == 0 and not self.cfg.dry_run and wandb.run is not None:
+            artifact = wandb.Artifact(
+                name=f"checkpoint-{wandb.run.id}",
+                type="model",
+                metadata={"epoch": self.train_cfg.num_epochs - 1},
+            )
+            artifact.add_file(str(out_path / "latest.pt"))
+            artifact.add_file(str(out_path / "config.yaml"))
+            wandb.log_artifact(artifact, aliases=["final"])
+        
+        distprint(f"all checkpoints saved to {out_path}", local_rank=self.rank)
+
     def step(self, batch, model_components, loss_fn, device, log=False):
         if 'context' in batch: # B C T H W
             ctx = batch['context'].to(device)
