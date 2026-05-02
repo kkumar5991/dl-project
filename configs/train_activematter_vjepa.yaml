@@ -27,6 +27,13 @@ train:
   run_name: "vjepa-ema-temporal"
   distributed: true
 
+  # Masking parameters
+  channel_masked: false
+  field_masked: true
+  inverse_masked: false
+  learnable_mask: false
+  mask_period: 2
+
   # V-JEPA hyperparameters
   ema_base_momentum: 0.998   # cosine schedule start
   ema_final_momentum: 1.0    # cosine schedule end
