@@ -146,7 +146,17 @@ class SupervisedTrainer(Trainer):
         ).to(self.rank)
 
         loss = loss_fn(pred, labels)
-        return pred, {"loss": loss}
+        loss_dict = {"loss": loss}
+
+        # Per-target MSE for regression — surfaces α (dim_0) vs ζ (dim_1)
+        # separately. gather_losses_and_report prefixes train/ or val/ to
+        # every key, so this lands as train/loss_dim_0, val/loss_dim_0, etc.
+        if pred.dim() == 2:
+            per_dim = ((pred.detach() - labels.detach()) ** 2).mean(dim=0)
+            for i in range(per_dim.shape[0]):
+                loss_dict[f"loss_dim_{i}"] = per_dim[i]
+
+        return pred, loss_dict
 
 
 # ============================================================================
