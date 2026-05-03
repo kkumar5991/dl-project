@@ -240,3 +240,21 @@ sbatch generate_all_subsets.sh
 - [EB-JEPA GitHub](https://github.com/facebookresearch/jepa)
 - [The Well / active_matter](https://huggingface.co/datasets/polymathic-ai/active_matter)
 - [Baseline paper: arXiv:2603.13227](https://arxiv.org/abs/2603.13227)
+
+---
+
+## Experiment tracking
+
+All runs reported in the paper (linear-probe and kNN evaluations across
+the four encoders) are logged to W&B at:
+
+[https://wandb.ai/ar9799-new-york-university/physics-jepa/overview](https://wandb.ai/ar9799-new-york-university/physics-jepa/overview)
+
+Run-name conventions used in the dashboard:
+
+- `activematter-baseline-full-FT-linear` — baseline JEPA + linear probe
+- `activematter-jepa-baseline-full-FT-knn` — baseline JEPA + kNN
+- `activematter-vjepa-ema-temporal-full-FT-{linear,knn}` — EMA-temporal V-JEPA
+- `activematter-vjepa-fieldmask-ema-temporal-full-FT-{linear,knn}` — field-mask V-JEPA
+- `active_matter-16frames-cnn-supervised-baseline-linear` — end-to-end supervised
+- `activematter-supervised-baseline-FT-knn` — supervised encoder + kNN
