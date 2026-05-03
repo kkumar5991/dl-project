@@ -104,9 +104,16 @@ Replace the inner `bash scripts/...` line with one of:
 
 ### `slurm_fine_tune.sh` — frozen-encoder evaluation
 
-Pass the encoder checkpoint as the script argument. The encoder file is the
-`ConvEncoder_<epoch>.pth` written by training under
-`./checkpoints/<run_name>/`.
+Pass the encoder checkpoint as the script argument. Pretrained checkpoints
+from our runs are committed under [checkpoints/](checkpoints/) — pick the
+one matching the encoder you want to evaluate:
+
+| Pretrained encoder | Checkpoint path |
+|---|---|
+| Original CNN-JEPA (VICReg, baseline) | `checkpoints/active_matter-16frames-cnn-jepa-baseline-full/ConvEncoder_29.pth` |
+| EMA-temporal V-JEPA | `checkpoints/active_matter-16frames-cnn-jepa-vjepa-ema-temporal-full/ConvEncoder_29.pth` |
+| Field-mask + EMA V-JEPA | `checkpoints/active_matter-16frames-cnn-jepa-vjepa-fieldmask-ema-temporal-full/ConvEncoder_29.pth` |
+| Supervised baseline (end-to-end) | `checkpoints/active_matter-16frames-cnn-supervised-baseline-linear/ConvEncoder_29.pth` |
 
 | Goal | Inner command |
 |---|---|
@@ -115,6 +122,36 @@ Pass the encoder checkpoint as the script argument. The encoder file is the
 | Supervised encoder → **linear probe** | `bash scripts/active_matter/run_finetune_supervised_linear.sh <ConvEncoder_xx.pth>` |
 | Supervised encoder → **kNN regression** | `bash scripts/active_matter/run_finetune_supervised_knn.sh <ConvEncoder_xx.pth>` |
 | VideoMAE finetune (legacy) | `bash scripts/active_matter/run_finetune_videomae.sh <ckpt.pth>` |
+
+> If you train your own encoder, the script writes a fresh
+> `ConvEncoder_<epoch>.pth` under `./checkpoints/<run_name>/` — pass that
+> path instead.
+
+### Reproducing the reported numbers
+
+Each row of the results tables in the report corresponds to one
+(pretraining, evaluation) pair. The table below maps each row to the
+exact pretrain command (or the committed checkpoint to skip pretraining)
+and the matching evaluation script. Validation MSE is on $z$-scored
+$(\alpha,\zeta)$, full train split.
+
+| # | Encoder (pretrain) | Pretrain command | Eval head | Eval command | Approx. val MSE (avg) |
+|---|---|---|---|---|---|
+| 1 | Baseline JEPA (VICReg) | `bash scripts/active_matter/run_train_jepa.sh` | linear | `run_finetune_jepa_linear.sh checkpoints/active_matter-16frames-cnn-jepa-baseline-full/ConvEncoder_29.pth` | 0.669 |
+| 2 | Baseline JEPA (VICReg) | (same as #1) | kNN ($k{=}20$) | `run_finetune_jepa_knn.sh <same ckpt>` | 0.99 |
+| 3 | EMA-temporal V-JEPA | `bash scripts/active_matter/run_train_vjepa.sh` | linear | `run_finetune_jepa_linear.sh checkpoints/active_matter-16frames-cnn-jepa-vjepa-ema-temporal-full/ConvEncoder_29.pth` | 0.407 |
+| 4 | EMA-temporal V-JEPA | (same as #3) | kNN ($k{=}20$) | `run_finetune_jepa_knn.sh <same ckpt>` | 0.771 |
+| 5 | Field-mask EMA V-JEPA | `bash scripts/active_matter/run_train_vjepa.sh` with `train.field_masked=true` (and optionally `train.inverse_target=true train.learnable_mask=true`) | linear | `run_finetune_jepa_linear.sh checkpoints/active_matter-16frames-cnn-jepa-vjepa-fieldmask-ema-temporal-full/ConvEncoder_29.pth` | 0.482 |
+| 6 | Field-mask EMA V-JEPA | (same as #5) | kNN ($k{=}20$) | `run_finetune_jepa_knn.sh <same ckpt>` | 0.418 |
+| 7 | Supervised baseline | `bash scripts/active_matter/run_train_supervised.sh` | end-to-end linear | (training itself is the eval — see `val/loss` in wandb) | 0.055 |
+| 8 | Supervised encoder | (same as #7) | kNN ($k{=}20$) | `run_finetune_supervised_knn.sh checkpoints/active_matter-16frames-cnn-supervised-baseline-linear/ConvEncoder_29.pth` | 0.056 |
+
+All eval commands assume you're at the repo root and that
+`scripts/active_matter/...` is the script-name prefix. To skip pretraining
+entirely, point the eval script at the matching path under
+`checkpoints/`. To re-pretrain from scratch, run the pretrain command in
+`slurm_train.sh` first; the encoder file will be written under
+`./checkpoints/<run_name>/ConvEncoder_29.pth`.
 
 #### Common Hydra overrides (append to the inner command)
 
@@ -134,12 +171,12 @@ ft.batch_size=64
 --seed 7
 ```
 
-Example — kNN eval of a V-JEPA checkpoint with a custom k sweep, by editing
-the inner line in `slurm_fine_tune.sh`:
+Example — kNN eval of the field-mask V-JEPA checkpoint with a custom k
+sweep, by editing the inner line in `slurm_fine_tune.sh`:
 
 ```bash
 bash scripts/active_matter/run_finetune_jepa_knn.sh \
-    ../checkpoints/active_matter-16frames-cnn-jepa-vjepa-temporal/ConvEncoder_29.pth \
+    checkpoints/active_matter-16frames-cnn-jepa-vjepa-fieldmask-ema-temporal-full/ConvEncoder_29.pth \
     'ft.n_neighbors_list=[1,3,5,10,20,50,100]' \
     ft.knn_weights=uniform
 ```
