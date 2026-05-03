@@ -1,0 +1,45 @@
+dataset:
+  name: active_matter
+  num_frames: 16
+  num_frames_per_patch: 2
+  num_chans: 11
+  resolution: 224
+  offset: 1
+model:
+  dims:
+  - 16
+  - 32
+  - 64
+  - 128
+  - 128
+  num_res_blocks:
+  - 3
+  - 3
+  - 3
+  - 9
+  - 3
+  name: cnn
+  objective: supervised
+train:
+  num_epochs: 30
+  batch_size: 4
+  report_every: 100
+  save_every: 2
+  include_labels: true
+  predict_n_steps: false
+  task: regression
+  lr_scheduler: cosine
+  lr_scheduler_warmup_epochs: 2
+  min_lr: 1.0e-06
+  lr: 0.001
+  weight_decay: 0.05
+  noise_std: 1.0
+  run_name: baseline-linear
+  distributed: true
+  sim_coeff: 2
+  std_coeff: 40
+  cov_coeff: 2
+wandb_project: physics-jepa
+out_path: ../checkpoints
+cache_path: ./dataset_cache
+dry_run: false
