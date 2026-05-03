@@ -1,0 +1,62 @@
+dataset:
+  name: active_matter
+  num_frames: 16
+  num_frames_per_patch: 2
+  num_chans: 11
+  resolution: 224
+  offset: 1
+model:
+  dims:
+  - 16
+  - 32
+  - 64
+  - 128
+  - 128
+  num_res_blocks:
+  - 3
+  - 3
+  - 3
+  - 9
+  - 3
+  name: cnn
+  objective: jepa
+ft:
+  num_epochs: 100
+  lr: 0.001
+  batch_size: 32
+  report_every: 100
+  save_every: 10
+  head_type: linear
+  embeddings_dir: ./embeddings
+  task: regression
+  use_attentive_pooling: true
+  lr_scheduler: cosine
+  lr_scheduler_warmup_epochs: 2
+  min_lr: 0
+  weight_decay: 0.01
+  noise_std: 1.0
+  run_name: activematter-baseline-full-FT-attention
+  distributed: false
+train:
+  num_epochs: 30
+  batch_size: 4
+  report_every: 100
+  save_every: 2
+  include_labels: false
+  sim_coeff: 2
+  std_coeff: 40
+  cov_coeff: 2
+  predict_n_steps: false
+  lr_scheduler: cosine
+  lr_scheduler_warmup_epochs: 2
+  min_lr: 1.0e-06
+  lr: 0.001
+  weight_decay: 0.05
+  noise_std: 1.0
+  run_name: baseline-full
+  distributed: true
+  channel_masked: false
+wandb_project: physics-jepa
+out_path: ../checkpoints
+cache_path: ./dataset_cache
+dry_run: false
